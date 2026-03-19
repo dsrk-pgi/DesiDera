@@ -25,13 +25,13 @@ app.use('/api/feedback', feedbackRoutes);
 
 app.use('/api/bills', express.static(path.join(__dirname, '..', 'bills')));
 
-const port = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
 connectDb()
   .then(() => {
-    app.listen(port, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       // no console comments
-      console.log(`DesiDera backend running on :${port}`);
+      console.log(`Server is running on port ${PORT}`);
     });
   })
   .catch((err) => {
