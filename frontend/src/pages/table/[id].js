@@ -1,0 +1,567 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
+import { jsPDF } from 'jspdf';
+import Layout from '@/components/Layout';
+import MenuItemCard from '@/components/MenuItemCard';
+import CartPanel from '@/components/CartPanel';
+import Toast from '@/components/Toast';
+import ShimmerCard from '@/components/ShimmerCard';
+import { getMenu, getOrderHistory, placeOrderWithItems } from '@/lib/api';
+
+function buildWhatsAppLink({ tableNumber, cartLines }) {
+  const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const lines = cartLines.map((l) => {
+    const unit = l.variant === 'half' ? l.halfPrice : l.fullPrice;
+    const lineTotal = unit * l.quantity;
+    const variantLabel = l.variant === 'half' ? 'Half' : 'Full';
+    return `- ${l.name} (${variantLabel}) x${l.quantity} = ₹${lineTotal}`;
+  });
+
+  const msg = [
+    'DesiDera Order',
+    `Table No: ${tableNumber}`,
+    'Items:',
+    ...lines,
+    '',
+    `Time: ${time}`
+  ].join('\n');
+
+  const encoded = encodeURIComponent(msg);
+  return `https://wa.me/917318582007?text=${encoded}`;
+}
+
+export default function TablePage() {
+  const router = useRouter();
+  const [tableId, setTableId] = useState('');
+  const tableNumber = Number(tableId);
+
+  const [menu, setMenu] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [orderHistory, setOrderHistory] = useState([]);
+  const [generatedBill, setGeneratedBill] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [placing, setPlacing] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
+
+  const [selectedVariant, setSelectedVariant] = useState({});
+  const [selectedQty, setSelectedQty] = useState({});
+
+  const [orderResult, setOrderResult] = useState(null);
+  const [activeCategory, setActiveCategory] = useState('All');
+
+  const categories = useMemo(() => {
+    const cats = [...new Set(menu.map((it) => it.category).filter(Boolean))];
+    return ['All', ...cats];
+  }, [menu]);
+
+  const filteredMenu = useMemo(() => {
+    if (activeCategory === 'All') return menu;
+    return menu.filter((it) => it.category === activeCategory);
+  }, [menu, activeCategory]);
+
+  const storageKey = useMemo(() => {
+    if (!tableId) return '';
+    return `desidera_cart_table_${tableId}`;
+  }, [tableId]);
+
+  useEffect(() => {
+    return () => {
+      if (generatedBill && generatedBill.blobUrl) {
+        URL.revokeObjectURL(generatedBill.blobUrl);
+      }
+    };
+  }, [generatedBill]);
+
+  const subTotal = useMemo(() => {
+    return cart.reduce((sum, it) => {
+      const unit = it.variant === 'half' ? it.halfPrice : it.fullPrice;
+      return sum + unit * it.quantity;
+    }, 0);
+  }, [cart]);
+
+  const gst = useMemo(() => Number((subTotal * 0.18).toFixed(2)), [subTotal]);
+  const total = useMemo(() => Number((subTotal + gst).toFixed(2)), [subTotal, gst]);
+
+  function persist(nextCart) {
+    setCart(nextCart);
+    setGeneratedBill(null);
+    if (!storageKey) return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(nextCart));
+    } catch (e) {
+      setError('Failed to persist cart');
+    }
+  }
+
+  function hydrate() {
+    if (!storageKey) return;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
+        setCart([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setCart(parsed);
+      }
+    } catch (e) {
+      setCart([]);
+    }
+  }
+
+  async function refreshMenu() {
+    const { items } = await getMenu();
+    setMenu(items);
+  }
+
+  async function refreshHistory() {
+    const { orders } = await getOrderHistory(tableNumber);
+    setOrderHistory(orders || []);
+  }
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    const nextId = String(router.query.id || '');
+    setTableId(nextId);
+  }, [router.isReady, router.query.id]);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    hydrate();
+  }, [storageKey]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        if (!Number.isFinite(tableNumber)) {
+          throw new Error('Invalid table number');
+        }
+        await refreshMenu();
+        await refreshHistory();
+        if (active) setLoading(false);
+      } catch (e) {
+        if (!active) return;
+        setError(e.message || 'Failed to load');
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [tableNumber]);
+
+  async function onAdd(item) {
+    const variant = selectedVariant[item._id] || 'full';
+    const qty = selectedQty[item._id] || 1;
+
+    const next = [...cart];
+    const idx = next.findIndex((l) => l.menuItemId === item._id && l.variant === variant);
+    if (idx >= 0) {
+      next[idx] = { ...next[idx], quantity: next[idx].quantity + qty };
+    } else {
+      next.push({
+        menuItemId: item._id,
+        name: item.name,
+        imageUrl: item.imageUrl,
+        variant,
+        quantity: qty,
+        halfPrice: item.halfPrice ?? item.priceHalf,
+        fullPrice: item.fullPrice ?? item.priceFull,
+        priceHalf: item.priceHalf ?? item.halfPrice,
+        priceFull: item.priceFull ?? item.fullPrice,
+        category: item.category || ''
+      });
+    }
+
+    persist(next);
+  }
+
+  function onDec(line) {
+    const next = cart
+      .map((l) => {
+        if (l.menuItemId === line.menuItemId && l.variant === line.variant) {
+          return { ...l, quantity: Math.max(0, l.quantity - 1) };
+        }
+        return l;
+      })
+      .filter((l) => l.quantity > 0);
+
+    persist(next);
+  }
+
+  function onInc(line) {
+    const next = cart.map((l) => {
+      if (l.menuItemId === line.menuItemId && l.variant === line.variant) {
+        return { ...l, quantity: l.quantity + 1 };
+      }
+      return l;
+    });
+
+    persist(next);
+  }
+
+  function onRemove(line) {
+    const next = cart.filter((l) => !(l.menuItemId === line.menuItemId && l.variant === line.variant));
+    persist(next);
+  }
+
+  function onVariantChange(line, nextVariant) {
+    if (!['half', 'full'].includes(nextVariant)) return;
+
+    const next = [...cart];
+    const idx = next.findIndex((l) => l.menuItemId === line.menuItemId && l.variant === line.variant);
+    if (idx === -1) return;
+
+    const existingIdx = next.findIndex((l) => l.menuItemId === line.menuItemId && l.variant === nextVariant);
+    const moved = { ...next[idx], variant: nextVariant };
+
+    if (existingIdx >= 0) {
+      next[existingIdx] = { ...next[existingIdx], quantity: next[existingIdx].quantity + moved.quantity };
+      next.splice(idx, 1);
+    } else {
+      next[idx] = moved;
+    }
+
+    persist(next);
+  }
+
+  async function onPlaceOrder() {
+    setError('');
+    setPlacing(true);
+    setOrderResult(null);
+    try {
+      const itemsPayload = cart.map((l) => ({
+        menuItemId: l.menuItemId,
+        variant: l.variant,
+        quantity: l.quantity
+      }));
+
+      const whatsappLink = buildWhatsAppLink({ tableNumber, cartLines: cart });
+      window.open(whatsappLink, '_blank', 'noopener,noreferrer');
+
+      const res = await placeOrderWithItems(tableNumber, itemsPayload);
+      setOrderResult({ ...res, whatsappLink });
+      persist([]);
+
+      await refreshHistory();
+    } catch (e) {
+      setError(e.message || 'Failed to place order');
+    } finally {
+      setPlacing(false);
+    }
+  }
+
+  function formatTime(iso) {
+    try {
+      return new Date(iso).toLocaleString();
+    } catch (e) {
+      return String(iso || '');
+    }
+  }
+
+  function onGenerateBill() {
+    if (!Number.isFinite(tableNumber)) {
+      setError('Invalid table number');
+      return;
+    }
+
+    if (!cart || cart.length === 0) {
+      setError('Cart is empty');
+      return;
+    }
+
+    setError('');
+
+    const doc = new jsPDF();
+    let y = 14;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('DesiDera', 105, y, { align: 'center' });
+
+    y += 8;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Table Number: ${tableNumber}`, 14, y);
+    doc.text(`Time: ${new Date().toLocaleString()}`, 14, y + 6);
+
+    y += 16;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Items', 14, y);
+
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+
+    cart.forEach((l) => {
+      const unit = l.variant === 'half' ? l.halfPrice : l.fullPrice;
+      const lineTotal = unit * l.quantity;
+      const variantLabel = l.variant === 'half' ? 'Half' : 'Full';
+      const row = `${l.name} (${variantLabel})  x${l.quantity}  @ ₹${Number(unit).toFixed(0)}  = ₹${Number(lineTotal).toFixed(0)}`;
+
+      const split = doc.splitTextToSize(row, 180);
+      doc.text(split, 14, y);
+      y += split.length * 6;
+
+      if (y > 270) {
+        doc.addPage();
+        y = 14;
+      }
+    });
+
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Subtotal: ₹${Number(subTotal).toFixed(2)}`, 14, y);
+    y += 7;
+    doc.text(`GST (18%): ₹${Number(gst).toFixed(2)}`, 14, y);
+    y += 8;
+    doc.setFontSize(12);
+    doc.text(`Grand Total: ₹${Number(total).toFixed(2)}`, 14, y);
+
+    const fileName = `DesiDera_Table_${tableNumber}_Bill.pdf`;
+    const blob = doc.output('blob');
+
+    if (generatedBill && generatedBill.blobUrl) {
+      URL.revokeObjectURL(generatedBill.blobUrl);
+    }
+
+    const blobUrl = URL.createObjectURL(blob);
+    const msg = `Your bill from DesiDera is ready. Total: ₹${Number(total).toFixed(2)}`;
+    const whatsappBillLink = `https://wa.me/917318582007?text=${encodeURIComponent(msg)}`;
+
+    setGeneratedBill({ blobUrl, fileName, whatsappBillLink, total: Number(total).toFixed(2) });
+  }
+
+  return (
+    <Layout title={`DesiDera — Table ${Number.isFinite(tableNumber) ? tableNumber : ''}`}>
+      <Toast message={error} type="error" onDismiss={() => setError('')} />
+
+      {loading ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="space-y-6">
+            <div className="h-7 w-48 rounded-xl shimmer-bg" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <ShimmerCard key={i} />
+              ))}
+            </div>
+          </div>
+          <div className="hidden lg:block">
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card space-y-3">
+              <div className="h-5 w-24 rounded-xl shimmer-bg" />
+              <div className="h-32 rounded-2xl shimmer-bg" />
+              <div className="h-12 rounded-2xl shimmer-bg" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <section className="space-y-5">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <h2 className="font-display text-xl font-bold text-charcoal-900">Today&apos;s Menu</h2>
+                <p className="mt-0.5 text-sm text-slate-500">Freshly prepared, served hot.</p>
+              </div>
+              <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
+                {menu.length} items
+              </span>
+            </div>
+
+            {categories.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition ${
+                      activeCategory === cat
+                        ? 'bg-brand-600 text-white shadow-sm'
+                        : 'border border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-700'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredMenu.map((it, index) => {
+                const variant = selectedVariant[it._id] || 'full';
+                const qty = selectedQty[it._id] || 1;
+
+                return (
+                  <div
+                    key={it._id}
+                    className="animate-fade-up"
+                    style={{ animationDelay: `${index * 0.06}s` }}
+                  >
+                    <MenuItemCard
+                      item={it}
+                      variant={variant}
+                      qty={qty}
+                      onVariantChange={(v) => setSelectedVariant((s) => ({ ...s, [it._id]: v }))}
+                      onQtyChange={(q) => setSelectedQty((s) => ({ ...s, [it._id]: q }))}
+                      onAdd={() => onAdd(it)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
+              <div className="flex items-center justify-between gap-4">
+                <h3 className="text-base font-bold text-charcoal-900">Order History</h3>
+                <span className="text-xs font-semibold text-slate-400">{orderHistory.length} orders</span>
+              </div>
+
+              {orderHistory.length === 0 ? (
+                <div className="mt-6 flex flex-col items-center gap-3 py-6 text-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-12 w-12 text-slate-200"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                    />
+                  </svg>
+                  <p className="text-sm font-bold text-slate-500">No orders yet</p>
+                  <p className="text-xs text-slate-400">Your placed orders will appear here.</p>
+                </div>
+              ) : (
+                <div className="mt-4 flex flex-col gap-3">
+                  {orderHistory.map((o) => (
+                    <div key={o._id} className="rounded-2xl border border-slate-100 bg-cream-50 p-4">
+                      <div className="flex items-baseline justify-between gap-4">
+                        <span className="text-sm font-bold text-slate-900">Order</span>
+                        <span className="text-xs text-slate-400">{formatTime(o.createdAt)}</span>
+                      </div>
+
+                      <div className="mt-2 space-y-1">
+                        {(o.items || []).map((it, idx) => (
+                          <p key={`${o._id}_${idx}`} className="text-sm text-slate-600">
+                            · {it.name}{' '}
+                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-500">
+                              {String(it.variant || '').toUpperCase()}
+                            </span>{' '}
+                            × {it.quantity}
+                          </p>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-4 border-t border-slate-100 pt-3">
+                        <span className="text-sm font-extrabold text-brand-700">
+                          ₹{Number(o.grandTotal || 0).toFixed(2)}
+                        </span>
+                        {o.billUrl ? (
+                          <a
+                            href={o.billUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-bold text-slate-500 transition hover:text-brand-600"
+                          >
+                            View Bill →
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <div className="hidden lg:block">
+            <CartPanel
+              cart={cart}
+              subTotal={subTotal}
+              gst={gst}
+              total={total}
+              placing={placing}
+              onDec={onDec}
+              onInc={onInc}
+              onRemove={onRemove}
+              onVariantChange={onVariantChange}
+              onGenerateBill={onGenerateBill}
+              generatedBill={generatedBill}
+              onPlaceOrder={onPlaceOrder}
+              orderResult={orderResult}
+              mode="sidebar"
+            />
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={() => setCartOpen(true)}
+        className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 rounded-2xl bg-brand-600 px-5 py-4 text-left text-white shadow-brand transition hover:bg-brand-500 active:scale-[0.98] lg:hidden"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-extrabold">View Cart</p>
+            <p className="mt-0.5 text-xs text-brand-200">{cart.length} {cart.length === 1 ? 'item' : 'items'}</p>
+          </div>
+          <span className="text-base font-extrabold">₹{total.toFixed(2)}</span>
+        </div>
+      </button>
+
+      <div
+        className={`fixed inset-0 z-50 lg:hidden ${cartOpen ? '' : 'pointer-events-none'}`}
+        aria-hidden={!cartOpen}
+      >
+        <div
+          className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${cartOpen ? 'opacity-100' : 'opacity-0'}`}
+          onClick={() => setCartOpen(false)}
+        />
+
+        <div
+          className={`absolute bottom-0 left-0 right-0 max-h-[88vh] overflow-auto rounded-t-4xl bg-white p-5 transition-transform duration-300 ${cartOpen ? 'translate-y-0' : 'translate-y-full'}`}
+        >
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="font-display text-xl font-bold text-charcoal-900">Your Cart</h2>
+            <button
+              onClick={() => setCartOpen(false)}
+              aria-label="Close cart"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50"
+            >
+              ✕
+            </button>
+          </div>
+
+          <CartPanel
+            cart={cart}
+            subTotal={subTotal}
+            gst={gst}
+            total={total}
+            placing={placing}
+            onDec={onDec}
+            onInc={onInc}
+            onRemove={onRemove}
+            onVariantChange={onVariantChange}
+            onGenerateBill={onGenerateBill}
+            generatedBill={generatedBill}
+            onPlaceOrder={async () => {
+              await onPlaceOrder();
+              setCartOpen(false);
+            }}
+            orderResult={orderResult}
+            mode="drawer"
+          />
+        </div>
+      </div>
+    </Layout>
+  );
+}
