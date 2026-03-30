@@ -13,10 +13,11 @@ const app = express();
 
 app.use(cors({
   origin: [
+    "https://desi-dera.vercel.app",
     "https://desi-dera-git-main-dsrk-pgis-projects.vercel.app",
     "http://localhost:3000"
   ],
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   credentials: true
 }));
 app.use(express.json({ limit: '1mb' }));
