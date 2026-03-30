@@ -29,7 +29,15 @@ async function generateBillPdf({ orderId, tableNumber, createdAt, items, subTota
   const billsDir = ensureBillsDir();
   const fileName = `bill_${orderId}.pdf`;
   const filePath = path.join(billsDir, fileName);
-  const qrPath = path.join(__dirname, '..', '..', '..', 'QR.jpeg');
+  
+  const possibleQrPaths = [
+    path.join(__dirname, '..', '..', 'QR.jpeg'),
+    path.join(__dirname, '..', '..', '..', 'QR.jpeg'),
+    path.join(process.cwd(), 'QR.jpeg'),
+    path.join(process.cwd(), 'backend', 'QR.jpeg')
+  ];
+  
+  const qrPath = possibleQrPaths.find(p => fs.existsSync(p)) || possibleQrPaths[0];
 
   await new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
@@ -90,10 +98,11 @@ async function generateBillPdf({ orderId, tableNumber, createdAt, items, subTota
 
     doc.font('Helvetica');
     items.forEach((it) => {
-      doc.text(it.name, 50, doc.y, { continued: true, width: 200 });
-      doc.text(formatMoney(it.unitPrice), 250, doc.y, { continued: true, width: 80, align: 'right' });
-      doc.text(it.quantity.toString(), 330, doc.y, { continued: true, width: 80, align: 'right' });
-      doc.text(formatMoney(it.lineTotal), 410, doc.y, { width: 135, align: 'right' });
+      const startY = doc.y;
+      doc.text(it.name, 50, startY, { width: 200 });
+      doc.text(formatMoney(it.unitPrice), 250, startY, { width: 80, align: 'right' });
+      doc.text(it.quantity.toString(), 330, startY, { width: 80, align: 'right' });
+      doc.text(formatMoney(it.lineTotal), 410, startY, { width: 135, align: 'right' });
       doc.moveDown(0.3);
     });
 
