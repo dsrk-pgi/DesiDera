@@ -11,7 +11,14 @@ const feedbackRoutes = require('./routes/feedback');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://desi-dera-git-main-dsrk-pgis-projects.vercel.app",
+    "http://localhost:3000"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (req, res) => {
