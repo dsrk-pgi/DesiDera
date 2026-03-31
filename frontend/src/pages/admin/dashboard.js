@@ -9,6 +9,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [orderHistory, setOrderHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
@@ -32,17 +34,20 @@ export default function AdminDashboard() {
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-      const [ordersRes, statsRes] = await Promise.all([
+      const [ordersRes, statsRes, historyRes] = await Promise.all([
         fetch(`${API_BASE}/api/admin/orders`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
         fetch(`${API_BASE}/api/admin/stats`, {
           headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/api/admin/history`, {
+          headers: { Authorization: `Bearer ${token}` }
         })
       ]);
 
-      if (!ordersRes.ok || !statsRes.ok) {
-        if (ordersRes.status === 401 || statsRes.status === 401) {
+      if (!ordersRes.ok || !statsRes.ok || !historyRes.ok) {
+        if (ordersRes.status === 401 || statsRes.status === 401 || historyRes.status === 401) {
           localStorage.removeItem('admin_token');
           router.push('/admin/login');
           return;
@@ -52,9 +57,11 @@ export default function AdminDashboard() {
 
       const ordersData = await ordersRes.json();
       const statsData = await statsRes.json();
+      const historyData = await historyRes.json();
 
       setOrders(ordersData.orders || []);
       setStats(statsData);
+      setOrderHistory(historyData.orders || []);
       setLoading(false);
       setRefreshing(false);
     } catch (err) {
@@ -230,6 +237,71 @@ export default function AdminDashboard() {
             ))}
           </div>
         )}
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-charcoal-900">Today&apos;s Order History</h2>
+              <p className="text-xs text-slate-500">All orders placed today with timestamps</p>
+            </div>
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+            >
+              {showHistory ? 'Hide' : 'Show'} ({orderHistory.length})
+            </button>
+          </div>
+
+          {showHistory && (
+            <div className="space-y-3">
+              {orderHistory.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">No orders today</p>
+              ) : (
+                orderHistory.map((order) => (
+                  <div key={order._id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-bold text-brand-700">
+                          Table #{order.tableNumber}
+                        </span>
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          order.status === 'pending' 
+                            ? 'bg-amber-100 text-amber-700'
+                            : order.status === 'served'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {order.status === 'pending' ? '🔔 Pending' : order.status === 'served' ? '✓ Served' : '✅ Completed'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-slate-500">
+                          {new Date(order.createdAt).toLocaleTimeString('en-IN', { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            hour12: true 
+                          })}
+                        </p>
+                        <p className="text-sm font-extrabold text-brand-700">₹{order.grandTotal.toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+                      {order.items.map((item, idx) => (
+                        <div key={idx} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                          <p className="text-xs font-semibold text-slate-700">{item.name}</p>
+                          <p className="mt-0.5 text-[10px] text-slate-500">
+                            {item.variant === 'half' ? 'Half' : 'Full'} × {item.quantity}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </Layout>
   );

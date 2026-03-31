@@ -80,6 +80,35 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+router.get('/history', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const token = authHeader.substring(7);
+    const decoded = Buffer.from(token, 'base64').toString('utf-8');
+    const [username, password] = decoded.split(':');
+
+    if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayOrders = await Order.find({
+      createdAt: { $gte: today }
+    }).sort({ createdAt: -1 });
+
+    res.json({ orders: todayOrders });
+  } catch (error) {
+    console.error('Error fetching order history:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 router.patch('/orders/:orderId/status', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
