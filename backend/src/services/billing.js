@@ -100,11 +100,11 @@ async function generateBillPdf({ orderId, tableNumber, createdAt, items, subTota
     doc.font('Helvetica');
     items.forEach((it) => {
       const rowY = doc.y;
-      doc.text(it.name, 50, rowY, { width: 200 });
-      doc.text(formatMoney(it.unitPrice), 350, rowY, { width: 80, align: 'right' });
-      doc.text(String(it.quantity), 450, rowY, { width: 50, align: 'right' });
-      doc.text(formatMoney(it.lineTotal), 500, rowY, { width: 45, align: 'right' });
-      doc.moveDown(1.2);
+      doc.text(it.name, 50, rowY, { width: 280, lineBreak: false });
+      doc.text(formatMoney(it.unitPrice), 350, rowY, { width: 80, align: 'right', lineBreak: false });
+      doc.text(String(it.quantity), 450, rowY, { width: 50, align: 'right', lineBreak: false });
+      doc.text(formatMoney(it.lineTotal), 500, rowY, { width: 45, align: 'right', lineBreak: false });
+      doc.y = rowY + 18;
     });
 
     doc.moveDown(0.3);
@@ -138,7 +138,7 @@ async function generateBillPdf({ orderId, tableNumber, createdAt, items, subTota
 
     doc.fontSize(11).font('Helvetica-Bold');
     const totalY = doc.y;
-    doc.text('Mode: Cash', 350, totalY, { width: 100, align: 'right' });
+    doc.text('Mode: Cash/Online', 350, totalY, { width: 110, align: 'right' });
     doc.text(`Total: ${formatMoney(grandTotal)}`, 460, totalY, { width: 85, align: 'right' });
     doc.y = totalY + 20;
 
@@ -162,7 +162,7 @@ async function generateBillPdf({ orderId, tableNumber, createdAt, items, subTota
       doc.moveDown(8);
     }
 
-    doc.fontSize(11).font('Helvetica-Bold').text('We Value Your Feedback!', { align: 'center' });
+    doc.fontSize(11).font('Helvetica-Bold').text('We Value Your Feedback! 🙏🙏🙏🙏🙏', { align: 'center' });
     doc.moveDown(0.5);
     doc.fontSize(9).font('Helvetica').text('Please take a moment to share your dining experience with us.', { align: 'center' });
     doc.moveDown(0.3);
