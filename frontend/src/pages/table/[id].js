@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { jsPDF } from 'jspdf';
+import Link from 'next/link';
 import Layout from '@/components/Layout';
 import MenuItemCard from '@/components/MenuItemCard';
 import CartPanel from '@/components/CartPanel';
 import Toast from '@/components/Toast';
 import ShimmerCard from '@/components/ShimmerCard';
+import RunningBill from '@/components/RunningBill';
+import FinalBillThankYou from '@/components/FinalBillThankYou';
 import { getMenu, getOrderHistory, placeOrderWithItems } from '@/lib/api';
 
 function buildWhatsAppLink({ tableNumber, cartLines }) {
@@ -50,6 +53,8 @@ export default function TablePage() {
 
   const [orderResult, setOrderResult] = useState(null);
   const [activeCategory, setActiveCategory] = useState('All');
+  const [sessionOrders, setSessionOrders] = useState([]);
+  const [showFinalBill, setShowFinalBill] = useState(false);
 
   const categories = useMemo(() => {
     const cats = [...new Set(menu.map((it) => it.category).filter(Boolean))];
@@ -64,6 +69,11 @@ export default function TablePage() {
   const storageKey = useMemo(() => {
     if (!tableId) return '';
     return `desidera_cart_table_${tableId}`;
+  }, [tableId]);
+
+  const sessionKey = useMemo(() => {
+    if (!tableId) return '';
+    return `desidera_session_table_${tableId}`;
   }, [tableId]);
 
   useEffect(() => {
@@ -101,14 +111,47 @@ export default function TablePage() {
       const raw = window.localStorage.getItem(storageKey);
       if (!raw) {
         setCart([]);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setCart(parsed);
+      } else {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setCart(parsed);
+        }
       }
     } catch (e) {
       setCart([]);
+    }
+
+    if (!sessionKey) return;
+    try {
+      const sessionRaw = window.localStorage.getItem(sessionKey);
+      if (sessionRaw) {
+        const parsed = JSON.parse(sessionRaw);
+        if (Array.isArray(parsed)) {
+          setSessionOrders(parsed);
+        }
+      }
+    } catch (e) {
+      setSessionOrders([]);
+    }
+  }
+
+  function persistSession(orders) {
+    setSessionOrders(orders);
+    if (!sessionKey) return;
+    try {
+      window.localStorage.setItem(sessionKey, JSON.stringify(orders));
+    } catch (e) {
+      console.error('Failed to persist session');
+    }
+  }
+
+  function clearSession() {
+    setSessionOrders([]);
+    if (!sessionKey) return;
+    try {
+      window.localStorage.removeItem(sessionKey);
+    } catch (e) {
+      console.error('Failed to clear session');
     }
   }
 
@@ -248,6 +291,21 @@ export default function TablePage() {
 
       const res = await placeOrderWithItems(tableNumber, itemsPayload);
       setOrderResult({ ...res, whatsappLink });
+      
+      const newSessionOrder = {
+        orderId: res.orderId,
+        items: cart.map(l => ({
+          ...l,
+          unitPrice: l.variant === 'half' ? l.halfPrice : l.fullPrice,
+          lineTotal: (l.variant === 'half' ? l.halfPrice : l.fullPrice) * l.quantity
+        })),
+        subTotal: res.subTotal || subTotal,
+        gstAmount: res.gstAmount || gst,
+        grandTotal: res.grandTotal || total,
+        timestamp: new Date().toISOString()
+      };
+      
+      persistSession([...sessionOrders, newSessionOrder]);
       persist([]);
 
       await refreshHistory();
@@ -307,11 +365,89 @@ export default function TablePage() {
     }
   }
 
+  async function onRequestFinalBill() {
+    if (!Number.isFinite(tableNumber)) {
+      setError('Invalid table number');
+      return;
+    }
+
+    if (sessionOrders.length === 0) {
+      setError('No orders in this session');
+      return;
+    }
+
+    setError('');
+    setPlacing(true);
+
+    try {
+      const sessionTotal = sessionOrders.reduce((sum, order) => sum + (order.grandTotal || 0), 0);
+      const allItems = sessionOrders.flatMap(order => order.items || []);
+      
+      const consolidatedItems = allItems.reduce((acc, item) => {
+        const key = `${item.menuItemId}_${item.variant}`;
+        if (acc[key]) {
+          acc[key].quantity += item.quantity;
+          acc[key].lineTotal += item.lineTotal || 0;
+        } else {
+          acc[key] = { ...item };
+        }
+        return acc;
+      }, {});
+
+      const itemsPayload = Object.values(consolidatedItems).map(item => ({
+        menuItemId: item.menuItemId,
+        variant: item.variant,
+        quantity: item.quantity
+      }));
+
+      const res = await placeOrderWithItems(tableNumber, itemsPayload);
+
+      const orderSummary = sessionOrders.map((order, idx) => 
+        `Order ${idx + 1}: ₹${(order.grandTotal || 0).toFixed(2)}`
+      ).join('\n');
+
+      const msg = [
+        'DesiDera - Final Bill Request',
+        `Table No: ${tableNumber}`,
+        '',
+        'Session Summary:',
+        orderSummary,
+        '',
+        `Total Amount: ₹${sessionTotal.toFixed(2)}`,
+        '',
+        'Thank you for dining with us!'
+      ].join('\n');
+
+      const whatsappLink = `https://wa.me/917318582007?text=${encodeURIComponent(msg)}`;
+      window.open(whatsappLink, '_blank', 'noopener,noreferrer');
+
+      setGeneratedBill({ 
+        billUrl: res.billUrl,
+        fileName: `DesiDera_Table_${tableNumber}_FinalBill.pdf`,
+        whatsappBillLink: whatsappLink, 
+        total: sessionTotal.toFixed(2),
+        isFinalBill: true
+      });
+
+      setShowFinalBill(true);
+      clearSession();
+      persist([]);
+
+      await refreshHistory();
+    } catch (e) {
+      setError(e.message || 'Failed to generate final bill');
+    } finally {
+      setPlacing(false);
+    }
+  }
+
   return (
     <Layout title={`DesiDera — Table ${Number.isFinite(tableNumber) ? tableNumber : ''}`}>
       <Toast message={error} type="error" onDismiss={() => setError('')} />
 
-      {loading ? (
+      {showFinalBill ? (
+        <FinalBillThankYou generatedBill={generatedBill} tableNumber={tableNumber} />
+      ) : loading ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
           <div className="space-y-6">
             <div className="h-7 w-48 rounded-xl shimmer-bg" />
@@ -383,6 +519,10 @@ export default function TablePage() {
                 );
               })}
             </div>
+
+            {sessionOrders.length > 0 && (
+              <RunningBill sessionOrders={sessionOrders} tableNumber={tableNumber} />
+            )}
 
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
               <div className="flex items-center justify-between gap-4">
@@ -467,6 +607,8 @@ export default function TablePage() {
               generatedBill={generatedBill}
               onPlaceOrder={onPlaceOrder}
               orderResult={orderResult}
+              sessionOrders={sessionOrders}
+              onRequestFinalBill={onRequestFinalBill}
               mode="sidebar"
             />
           </div>
@@ -526,6 +668,11 @@ export default function TablePage() {
               setCartOpen(false);
             }}
             orderResult={orderResult}
+            sessionOrders={sessionOrders}
+            onRequestFinalBill={async () => {
+              await onRequestFinalBill();
+              setCartOpen(false);
+            }}
             mode="drawer"
           />
         </div>

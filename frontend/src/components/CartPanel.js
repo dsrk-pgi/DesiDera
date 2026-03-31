@@ -43,7 +43,9 @@ export default function CartPanel({
   generatedBill,
   onPlaceOrder,
   orderResult,
-  mode = 'sidebar'
+  mode = 'sidebar',
+  sessionOrders = [],
+  onRequestFinalBill
 }) {
   const containerClassName =
     mode === 'drawer'
@@ -198,20 +200,67 @@ export default function CartPanel({
 
           {orderResult ? (
             <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4 animate-fade-up">
-              <p className="text-sm font-bold text-brand-900">Order placed! 🎉</p>
-              <p className="mt-0.5 text-xs text-brand-600">ID: {orderResult.orderId}</p>
-              <div className="mt-3 flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-[10px] font-extrabold text-white">✓</span>
+                <p className="text-sm font-bold text-brand-900">Order placed! 🎉</p>
+              </div>
+              <p className="mt-1 text-xs text-brand-600">Order ID: {orderResult.orderId}</p>
+              <p className="mt-1 text-xs text-slate-600">Total: ₹{Number(orderResult.grandTotal || 0).toFixed(2)}</p>
+              
+              <div className="mt-3 flex flex-col gap-2">
+                {orderResult.billUrl && (
+                  <a
+                    href={orderResult.billUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-xl bg-charcoal-800 px-4 py-2.5 text-center text-sm font-extrabold text-white transition hover:opacity-90"
+                  >
+                    📄 View Bill PDF
+                  </a>
+                )}
                 <a
                   href={orderResult.whatsappLink}
                   target="_blank"
-                  rel="noreferrer"
-                  className="text-sm font-bold text-brand-700 transition hover:text-brand-500"
+                  rel="noopener noreferrer"
+                  className="rounded-xl border border-brand-300 bg-white px-4 py-2.5 text-center text-sm font-extrabold text-brand-700 transition hover:bg-brand-50"
                 >
-                  Open WhatsApp →
+                  📲 Open WhatsApp
                 </a>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-sm font-extrabold text-slate-700 transition hover:bg-slate-50"
+                >
+                  ← Back to Menu
+                </button>
+              </div>
+              
+              <div className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
+                <p className="text-xs font-semibold text-emerald-800">Thank you for your order! 🍽️</p>
+                <p className="mt-0.5 text-xs text-slate-500">Your order has been sent to the kitchen.</p>
               </div>
             </div>
           ) : null}
+
+          {sessionOrders && sessionOrders.length > 0 && onRequestFinalBill && (
+            <div className="rounded-2xl border-2 border-purple-300 bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+              <div className="mb-3 text-center">
+                <p className="text-sm font-bold text-purple-900">Ready to finish your meal?</p>
+                <p className="mt-0.5 text-xs text-purple-600">
+                  {sessionOrders.length} order{sessionOrders.length !== 1 ? 's' : ''} in this session
+                </p>
+              </div>
+              <button
+                onClick={onRequestFinalBill}
+                disabled={placing}
+                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:from-purple-500 hover:to-pink-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {placing ? 'Processing...' : '🧾 Request Final Bill'}
+              </button>
+              <p className="mt-2 text-center text-[10px] text-purple-600">
+                Consolidates all orders into one final bill
+              </p>
+            </div>
+          )}
         </div>
       )}
     </aside>
