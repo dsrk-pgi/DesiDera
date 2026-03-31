@@ -66,6 +66,27 @@ export default function CartPanel({
         )}
       </div>
 
+      {sessionOrders && sessionOrders.length > 0 && onRequestFinalBill && (
+        <div className="mt-4 rounded-2xl border-2 border-purple-300 bg-gradient-to-br from-purple-50 to-pink-50 p-4">
+          <div className="mb-3 text-center">
+            <p className="text-sm font-bold text-purple-900">Ready to finish your meal?</p>
+            <p className="mt-0.5 text-xs text-purple-600">
+              {sessionOrders.length} order{sessionOrders.length !== 1 ? 's' : ''} in this session
+            </p>
+          </div>
+          <button
+            onClick={onRequestFinalBill}
+            disabled={placing}
+            className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:from-purple-500 hover:to-pink-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {placing ? 'Processing...' : '🧾 Request Final Bill'}
+          </button>
+          <p className="mt-2 text-center text-[10px] text-purple-600">
+            Consolidates all orders into one final bill
+          </p>
+        </div>
+      )}
+
       {cart.length === 0 ? (
         <EmptyCartState />
       ) : (
@@ -240,27 +261,6 @@ export default function CartPanel({
               </div>
             </div>
           ) : null}
-
-          {sessionOrders && sessionOrders.length > 0 && onRequestFinalBill && (
-            <div className="rounded-2xl border-2 border-purple-300 bg-gradient-to-br from-purple-50 to-pink-50 p-4">
-              <div className="mb-3 text-center">
-                <p className="text-sm font-bold text-purple-900">Ready to finish your meal?</p>
-                <p className="mt-0.5 text-xs text-purple-600">
-                  {sessionOrders.length} order{sessionOrders.length !== 1 ? 's' : ''} in this session
-                </p>
-              </div>
-              <button
-                onClick={onRequestFinalBill}
-                disabled={placing}
-                className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg transition hover:from-purple-500 hover:to-pink-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {placing ? 'Processing...' : '🧾 Request Final Bill'}
-              </button>
-              <p className="mt-2 text-center text-[10px] text-purple-600">
-                Consolidates all orders into one final bill
-              </p>
-            </div>
-          )}
         </div>
       )}
     </aside>
