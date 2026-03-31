@@ -159,7 +159,7 @@ export default function CartPanel({
             🧾 Generate Bill (PDF)
           </button>
 
-          {generatedBill && generatedBill.blobUrl ? (
+          {generatedBill && (generatedBill.blobUrl || generatedBill.billUrl) ? (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 animate-fade-up">
               <div className="flex items-center gap-2">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-extrabold text-white">✓</span>
@@ -167,11 +167,12 @@ export default function CartPanel({
               </div>
               <div className="mt-3 flex flex-col gap-2">
                 <a
-                  href={generatedBill.blobUrl}
-                  download={generatedBill.fileName || 'DesiDera_Bill.pdf'}
+                  href={generatedBill.billUrl || generatedBill.blobUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="rounded-xl bg-charcoal-800 px-4 py-2.5 text-center text-sm font-extrabold text-white transition hover:opacity-90"
                 >
-                  ↓ Download PDF
+                  📄 View Bill PDF
                 </a>
                 <a
                   href={generatedBill.whatsappBillLink}

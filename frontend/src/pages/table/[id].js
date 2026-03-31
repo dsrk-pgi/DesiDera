@@ -266,7 +266,7 @@ export default function TablePage() {
     }
   }
 
-  function onGenerateBill() {
+  async function onGenerateBill() {
     if (!Number.isFinite(tableNumber)) {
       setError('Invalid table number');
       return;
@@ -278,65 +278,33 @@ export default function TablePage() {
     }
 
     setError('');
+    setPlacing(true);
 
-    const doc = new jsPDF();
-    let y = 14;
+    try {
+      const itemsPayload = cart.map((l) => ({
+        menuItemId: l.menuItemId,
+        variant: l.variant,
+        quantity: l.quantity
+      }));
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('DesiDera', 105, y, { align: 'center' });
+      const res = await placeOrderWithItems(tableNumber, itemsPayload);
+      
+      const msg = `Your bill from DesiDera is ready. Total: ₹${Number(res.grandTotal || total).toFixed(2)}`;
+      const whatsappBillLink = `https://wa.me/917318582007?text=${encodeURIComponent(msg)}`;
 
-    y += 8;
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Table Number: ${tableNumber}`, 14, y);
-    doc.text(`Time: ${new Date().toLocaleString()}`, 14, y + 6);
+      setGeneratedBill({ 
+        billUrl: res.billUrl,
+        fileName: `DesiDera_Table_${tableNumber}_Bill.pdf`,
+        whatsappBillLink, 
+        total: Number(res.grandTotal || total).toFixed(2) 
+      });
 
-    y += 16;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Items', 14, y);
-
-    y += 8;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-
-    cart.forEach((l) => {
-      const unit = l.variant === 'half' ? l.halfPrice : l.fullPrice;
-      const lineTotal = unit * l.quantity;
-      const variantLabel = l.variant === 'half' ? 'Half' : 'Full';
-      const row = `${l.name} (${variantLabel})  x${l.quantity}  @ ₹${Number(unit).toFixed(0)}  = ₹${Number(lineTotal).toFixed(0)}`;
-
-      const split = doc.splitTextToSize(row, 180);
-      doc.text(split, 14, y);
-      y += split.length * 6;
-
-      if (y > 270) {
-        doc.addPage();
-        y = 14;
-      }
-    });
-
-    y += 6;
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Subtotal: ₹${Number(subTotal).toFixed(2)}`, 14, y);
-    y += 7;
-    doc.text(`GST (18%): ₹${Number(gst).toFixed(2)}`, 14, y);
-    y += 8;
-    doc.setFontSize(12);
-    doc.text(`Grand Total: ₹${Number(total).toFixed(2)}`, 14, y);
-
-    const fileName = `DesiDera_Table_${tableNumber}_Bill.pdf`;
-    const blob = doc.output('blob');
-
-    if (generatedBill && generatedBill.blobUrl) {
-      URL.revokeObjectURL(generatedBill.blobUrl);
+      await refreshHistory();
+    } catch (e) {
+      setError(e.message || 'Failed to generate bill');
+    } finally {
+      setPlacing(false);
     }
-
-    const blobUrl = URL.createObjectURL(blob);
-    const msg = `Your bill from DesiDera is ready. Total: ₹${Number(total).toFixed(2)}`;
-    const whatsappBillLink = `https://wa.me/917318582007?text=${encodeURIComponent(msg)}`;
-
-    setGeneratedBill({ blobUrl, fileName, whatsappBillLink, total: Number(total).toFixed(2) });
   }
 
   return (
