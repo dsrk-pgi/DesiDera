@@ -22,7 +22,8 @@ const orderSchema = new mongoose.Schema(
     whatsappMessage: { type: String, required: true },
     whatsappLink: { type: String, required: true },
     billPdfPath: { type: String, default: '' },
-    billUrl: { type: String, default: '' }
+    billUrl: { type: String, default: '' },
+    status: { type: String, enum: ['pending', 'served', 'completed'], default: 'pending', index: true }
   },
   { timestamps: true }
 );
