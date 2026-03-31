@@ -521,7 +521,12 @@ export default function TablePage() {
             </div>
 
             {sessionOrders.length > 0 && (
-              <RunningBill sessionOrders={sessionOrders} tableNumber={tableNumber} />
+              <RunningBill 
+                sessionOrders={sessionOrders} 
+                tableNumber={tableNumber}
+                onRequestFinalBill={onRequestFinalBill}
+                placing={placing}
+              />
             )}
           </section>
 
