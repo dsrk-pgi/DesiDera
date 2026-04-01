@@ -8,7 +8,7 @@ import CartPanel from '@/components/CartPanel';
 import Toast from '@/components/Toast';
 import ShimmerCard from '@/components/ShimmerCard';
 import RunningBill from '@/components/RunningBill';
-import FinalBillThankYou from '@/components/FinalBillThankYou';
+import FinalBillDisplay from '@/components/FinalBillDisplay';
 import { getMenu, getOrderHistory, placeOrderWithItems } from '@/lib/api';
 
 function buildWhatsAppLink({ tableNumber, cartLines }) {
@@ -286,11 +286,8 @@ export default function TablePage() {
         quantity: l.quantity
       }));
 
-      const whatsappLink = buildWhatsAppLink({ tableNumber, cartLines: cart });
-      window.open(whatsappLink, '_blank', 'noopener,noreferrer');
-
       const res = await placeOrderWithItems(tableNumber, itemsPayload);
-      setOrderResult({ ...res, whatsappLink });
+      setOrderResult({ ...res });
       
       const newSessionOrder = {
         orderId: res.orderId,
@@ -426,10 +423,11 @@ export default function TablePage() {
         fileName: `DesiDera_Table_${tableNumber}_FinalBill.pdf`,
         whatsappBillLink: whatsappLink, 
         total: sessionTotal.toFixed(2),
-        isFinalBill: true
+        isFinalBill: true,
+        sessionOrders: sessionOrders,
+        sessionTotal: sessionTotal
       });
 
-      setShowFinalBill(true);
       clearSession();
       persist([]);
 
@@ -445,9 +443,7 @@ export default function TablePage() {
     <Layout title={`DesiDera — Table ${Number.isFinite(tableNumber) ? tableNumber : ''}`}>
       <Toast message={error} type="error" onDismiss={() => setError('')} />
 
-      {showFinalBill ? (
-        <FinalBillThankYou generatedBill={generatedBill} tableNumber={tableNumber} />
-      ) : loading ? (
+      {loading ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
           <div className="space-y-6">
             <div className="h-7 w-48 rounded-xl shimmer-bg" />
@@ -520,12 +516,19 @@ export default function TablePage() {
               })}
             </div>
 
-            {sessionOrders.length > 0 && (
+            {sessionOrders.length > 0 && !generatedBill?.isFinalBill && (
               <RunningBill 
                 sessionOrders={sessionOrders} 
                 tableNumber={tableNumber}
                 onRequestFinalBill={onRequestFinalBill}
                 placing={placing}
+              />
+            )}
+
+            {generatedBill?.isFinalBill && (
+              <FinalBillDisplay 
+                generatedBill={generatedBill}
+                tableNumber={tableNumber}
               />
             )}
           </section>

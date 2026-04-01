@@ -113,6 +113,16 @@ export default function AdminDashboard() {
     return acc;
   }, {});
 
+  const getTableTotal = (tableOrders) => {
+    return tableOrders.reduce((sum, order) => sum + (order.grandTotal || 0), 0);
+  };
+
+  const hasFinalBill = (tableOrders) => {
+    return tableOrders.some(order => 
+      order.whatsappMessage && order.whatsappMessage.includes('Final Bill Request')
+    );
+  };
+
   if (loading) {
     return (
       <Layout title="Admin Dashboard - DesiDera">
@@ -175,21 +185,46 @@ export default function AdminDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Object.entries(groupedOrders).map(([tableNumber, tableOrders]) => (
-              <div key={tableNumber} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-charcoal-900">Table #{tableNumber}</h3>
-                    <p className="text-xs text-slate-500">{tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''}</p>
+            {Object.entries(groupedOrders).map(([tableNumber, tableOrders]) => {
+              const isFinalBill = hasFinalBill(tableOrders);
+              const tableTotal = getTableTotal(tableOrders);
+              
+              return (
+                <div 
+                  key={tableNumber} 
+                  className={`rounded-3xl border p-5 shadow-card ${
+                    isFinalBill 
+                      ? 'border-purple-300 bg-gradient-to-br from-purple-50 to-pink-50' 
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-bold text-charcoal-900">Table #{tableNumber}</h3>
+                        <p className="text-xs text-slate-500">{tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''}</p>
+                      </div>
+                      {isFinalBill ? (
+                        <span className="rounded-full bg-purple-600 px-3 py-1 text-xs font-bold text-white">
+                          🧾 Final Bill
+                        </span>
+                      ) : (
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${
+                          tableOrders[0].status === 'pending' 
+                            ? 'bg-amber-100 text-amber-700' 
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {tableOrders[0].status === 'pending' ? '🔔 Pending' : '✓ Served'}
+                        </span>
+                      )}
+                    </div>
+                    {isFinalBill && (
+                      <div className="mt-3 rounded-xl border border-purple-200 bg-white p-3">
+                        <p className="text-xs font-semibold text-purple-700">Table Total</p>
+                        <p className="text-2xl font-extrabold text-purple-900">₹{tableTotal.toFixed(2)}</p>
+                      </div>
+                    )}
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${
-                    tableOrders[0].status === 'pending' 
-                      ? 'bg-amber-100 text-amber-700' 
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {tableOrders[0].status === 'pending' ? '🔔 Pending' : '✓ Served'}
-                  </span>
-                </div>
 
                 <div className="space-y-3">
                   {tableOrders.map((order) => (
@@ -234,7 +269,8 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
