@@ -11,6 +11,7 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [orderHistory, setOrderHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [expandedPreviousOrders, setExpandedPreviousOrders] = useState({});
 
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
@@ -102,6 +103,13 @@ export default function AdminDashboard() {
   function handleRefresh() {
     setRefreshing(true);
     fetchData();
+  }
+
+  function togglePreviousOrders(tableNumber) {
+    setExpandedPreviousOrders((prev) => ({
+      ...prev,
+      [tableNumber]: !prev[tableNumber]
+    }));
   }
 
   const groupedOrders = orders.reduce((acc, order) => {
@@ -200,7 +208,7 @@ export default function AdminDashboard() {
               const isFinalBill = hasFinalBill(tableOrders);
               const tableTotal = getTableTotal(tableOrders);
               const { currentOrder, previousOrders } = categorizeOrders(tableOrders);
-              const [showPrevious, setShowPrevious] = React.useState(false);
+              const showPrevious = !!expandedPreviousOrders[tableNumber];
               
               return (
                 <div 
@@ -242,90 +250,90 @@ export default function AdminDashboard() {
                     )}
                   </div>
 
-                <div className="space-y-3">
-                  {currentOrder && (
-                    <div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="text-xs font-bold text-amber-700">🔥 CURRENT ORDER</span>
+                  <div className="space-y-3">
+                    {currentOrder && (
+                      <div>
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className="text-xs font-bold text-amber-700">🔥 CURRENT ORDER</span>
+                        </div>
+                        <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <p className="text-xs font-bold text-slate-600">
+                              {new Date(currentOrder.createdAt).toLocaleTimeString()}
+                            </p>
+                            <p className="text-sm font-extrabold text-amber-700">₹{currentOrder.grandTotal.toFixed(2)}</p>
+                          </div>
+
+                          <div className="space-y-1">
+                            {currentOrder.items.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-xs">
+                                <span className="text-slate-700">
+                                  {item.name} ({item.variant === 'half' ? 'H' : 'F'})
+                                </span>
+                                <span className="font-semibold text-slate-600">x{item.quantity}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-3">
+                            <button
+                              onClick={() => handleStatusChange(currentOrder._id, 'served')}
+                              className="w-full rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-500"
+                            >
+                              Mark Served
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="text-xs font-bold text-slate-600">
-                            {new Date(currentOrder.createdAt).toLocaleTimeString()}
-                          </p>
-                          <p className="text-sm font-extrabold text-amber-700">₹{currentOrder.grandTotal.toFixed(2)}</p>
-                        </div>
+                    )}
 
-                        <div className="space-y-1">
-                          {currentOrder.items.map((item, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-xs">
-                              <span className="text-slate-700">
-                                {item.name} ({item.variant === 'half' ? 'H' : 'F'})
-                              </span>
-                              <span className="font-semibold text-slate-600">x{item.quantity}</span>
-                            </div>
-                          ))}
-                        </div>
+                    {previousOrders.length > 0 && (
+                      <div>
+                        <button
+                          onClick={() => togglePreviousOrders(tableNumber)}
+                          className="mb-2 flex w-full items-center justify-between text-xs font-bold text-blue-700"
+                        >
+                          <span>📋 PREVIOUS ORDERS ({previousOrders.length})</span>
+                          <span>{showPrevious ? '▼' : '▶'}</span>
+                        </button>
+                        {showPrevious && (
+                          <div className="space-y-2">
+                            {previousOrders.map((order) => (
+                              <div key={order._id} className="rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50 p-3">
+                                <div className="mb-2 flex items-center justify-between">
+                                  <p className="text-xs font-bold text-slate-600">
+                                    {new Date(order.createdAt).toLocaleTimeString()}
+                                  </p>
+                                  <p className="text-sm font-extrabold text-blue-700">₹{order.grandTotal.toFixed(2)}</p>
+                                </div>
 
-                        <div className="mt-3">
-                          <button
-                            onClick={() => handleStatusChange(currentOrder._id, 'served')}
-                            className="w-full rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-500"
-                          >
-                            Mark Served
-                          </button>
-                        </div>
+                                <div className="space-y-1">
+                                  {order.items.map((item, idx) => (
+                                    <div key={idx} className="flex items-center justify-between text-xs">
+                                      <span className="text-slate-700">
+                                        {item.name} ({item.variant === 'half' ? 'H' : 'F'})
+                                      </span>
+                                      <span className="font-semibold text-slate-600">x{item.quantity}</span>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="mt-3">
+                                  <button
+                                    onClick={() => handleStatusChange(order._id, 'completed')}
+                                    className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-500"
+                                  >
+                                    Complete
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
-
-                  {previousOrders.length > 0 && (
-                    <div>
-                      <button
-                        onClick={() => setShowPrevious(!showPrevious)}
-                        className="mb-2 flex w-full items-center justify-between text-xs font-bold text-blue-700"
-                      >
-                        <span>📋 PREVIOUS ORDERS ({previousOrders.length})</span>
-                        <span>{showPrevious ? '▼' : '▶'}</span>
-                      </button>
-                      {showPrevious && (
-                        <div className="space-y-2">
-                          {previousOrders.map((order) => (
-                            <div key={order._id} className="rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-cyan-50 p-3">
-                              <div className="mb-2 flex items-center justify-between">
-                                <p className="text-xs font-bold text-slate-600">
-                                  {new Date(order.createdAt).toLocaleTimeString()}
-                                </p>
-                                <p className="text-sm font-extrabold text-blue-700">₹{order.grandTotal.toFixed(2)}</p>
-                              </div>
-
-                              <div className="space-y-1">
-                                {order.items.map((item, idx) => (
-                                  <div key={idx} className="flex items-center justify-between text-xs">
-                                    <span className="text-slate-700">
-                                      {item.name} ({item.variant === 'half' ? 'H' : 'F'})
-                                    </span>
-                                    <span className="font-semibold text-slate-600">x{item.quantity}</span>
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div className="mt-3">
-                                <button
-                                  onClick={() => handleStatusChange(order._id, 'completed')}
-                                  className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-500"
-                                >
-                                  Complete
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
               );
             })}
           </div>
