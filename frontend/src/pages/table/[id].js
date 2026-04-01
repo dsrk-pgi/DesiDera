@@ -399,39 +399,20 @@ export default function TablePage() {
 
       const res = await placeOrderWithItems(tableNumber, itemsPayload);
 
-      const orderSummary = sessionOrders.map((order, idx) => 
-        `Order ${idx + 1}: ₹${(order.grandTotal || 0).toFixed(2)}`
-      ).join('\n');
-
-      const msg = [
-        'DesiDera - Final Bill Request',
-        `Table No: ${tableNumber}`,
-        '',
-        'Session Summary:',
-        orderSummary,
-        '',
-        `Total Amount: ₹${sessionTotal.toFixed(2)}`,
-        '',
-        'Thank you for dining with us!'
-      ].join('\n');
-
-      const whatsappLink = `https://wa.me/917318582007?text=${encodeURIComponent(msg)}`;
-      window.open(whatsappLink, '_blank', 'noopener,noreferrer');
-
-      setGeneratedBill({ 
-        billUrl: res.billUrl,
-        fileName: `DesiDera_Table_${tableNumber}_FinalBill.pdf`,
-        whatsappBillLink: whatsappLink, 
-        total: sessionTotal.toFixed(2),
-        isFinalBill: true,
+      const billData = {
+        orderId: res.orderId,
+        tableNumber: tableNumber,
         sessionOrders: sessionOrders,
-        sessionTotal: sessionTotal
-      });
+        sessionTotal: sessionTotal,
+        timestamp: new Date().toISOString()
+      };
+
+      localStorage.setItem(`bill_${res.orderId}`, JSON.stringify(billData));
 
       clearSession();
       persist([]);
 
-      await refreshHistory();
+      router.push(`/bill/${res.orderId}`);
     } catch (e) {
       setError(e.message || 'Failed to generate final bill');
     } finally {
