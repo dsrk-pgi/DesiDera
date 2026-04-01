@@ -239,14 +239,6 @@ export default function CartPanel({
                     📄 View Bill PDF
                   </a>
                 )}
-                <a
-                  href={orderResult.whatsappLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-xl border border-brand-300 bg-white px-4 py-2.5 text-center text-sm font-extrabold text-brand-700 transition hover:bg-brand-50"
-                >
-                  📲 Open WhatsApp
-                </a>
                 <button
                   onClick={() => window.location.reload()}
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-sm font-extrabold text-slate-700 transition hover:bg-slate-50"
