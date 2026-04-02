@@ -12,6 +12,8 @@ export default function AdminDashboard() {
   const [orderHistory, setOrderHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedPreviousOrders, setExpandedPreviousOrders] = useState({});
+  const [serviceRequests, setServiceRequests] = useState([]);
+  const [previousRequestCount, setPreviousRequestCount] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('admin_token');
@@ -22,7 +24,12 @@ export default function AdminDashboard() {
 
     fetchData();
     const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    const serviceInterval = setInterval(fetchServiceRequests, 10000);
+    fetchServiceRequests();
+    return () => {
+      clearInterval(interval);
+      clearInterval(serviceInterval);
+    };
   }, []);
 
   async function fetchData() {
@@ -69,6 +76,64 @@ export default function AdminDashboard() {
       setError('Failed to load dashboard data');
       setLoading(false);
       setRefreshing(false);
+    }
+  }
+
+  async function fetchServiceRequests() {
+    const token = localStorage.getItem('admin_token');
+    if (!token) return;
+
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+      const res = await fetch(`${API_BASE}/api/admin/service-requests`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const requests = data.requests || [];
+      
+      if (requests.length > previousRequestCount && previousRequestCount > 0) {
+        playNotificationSound();
+      }
+      
+      setPreviousRequestCount(requests.length);
+      setServiceRequests(requests);
+    } catch (err) {
+      console.error('Failed to fetch service requests:', err);
+    }
+  }
+
+  function playNotificationSound() {
+    try {
+      const audio = new Audio('/notification.mp3');
+      audio.play().catch(e => console.log('Audio play failed:', e));
+    } catch (e) {
+      console.log('Audio not supported');
+    }
+  }
+
+  async function handleServiceRequestStatus(requestId, newStatus) {
+    const token = localStorage.getItem('admin_token');
+    if (!token) return;
+
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+      const res = await fetch(`${API_BASE}/api/admin/service-requests/${requestId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!res.ok) throw new Error('Failed to update');
+
+      fetchServiceRequests();
+    } catch (err) {
+      setError('Failed to update service request');
     }
   }
 
@@ -163,7 +228,19 @@ export default function AdminDashboard() {
             <h1 className="font-display text-2xl font-bold text-charcoal-900">Owner Dashboard</h1>
             <p className="mt-1 text-sm text-slate-500">Real-time order management</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => router.push('/admin/kitchen')}
+              className="rounded-xl bg-gradient-to-r from-orange-600 to-red-600 px-4 py-2 text-sm font-bold text-white transition hover:from-orange-500 hover:to-red-500"
+            >
+              🔥 Kitchen
+            </button>
+            <button
+              onClick={() => router.push('/admin/menu-management')}
+              className="rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-sm font-bold text-white transition hover:from-purple-500 hover:to-indigo-500"
+            >
+              📋 Menu
+            </button>
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -196,6 +273,61 @@ export default function AdminDashboard() {
             <p className="mt-2 text-4xl font-extrabold text-emerald-900">₹{stats.todayRevenue}</p>
           </div>
         </div>
+
+        {serviceRequests.length > 0 && (
+          <div className="rounded-3xl border-2 border-red-300 bg-gradient-to-br from-red-50 to-orange-50 p-6 shadow-xl animate-pulse">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="text-3xl">🔔</span>
+              <div>
+                <h2 className="text-lg font-bold text-red-900">Service Requests</h2>
+                <p className="text-sm text-red-700">{serviceRequests.length} pending request{serviceRequests.length !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              {serviceRequests.map((request) => {
+                const requestLabels = {
+                  call_waiter: { icon: '👋', text: 'Call Waiter', color: 'from-blue-500 to-blue-600' },
+                  request_water: { icon: '💧', text: 'Request Water', color: 'from-cyan-500 to-cyan-600' },
+                  request_cleaning: { icon: '🧹', text: 'Request Cleaning', color: 'from-purple-500 to-purple-600' }
+                };
+                const label = requestLabels[request.requestType] || { icon: '🔔', text: 'Service', color: 'from-slate-500 to-slate-600' };
+                
+                return (
+                  <div key={request._id} className="rounded-2xl border-2 border-white bg-white p-4 shadow-lg">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{label.icon}</span>
+                        <div>
+                          <p className="font-bold text-charcoal-900">{label.text}</p>
+                          <p className="text-sm text-slate-600">Table #{request.tableNumber}</p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+                        {new Date(request.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleServiceRequestStatus(request._id, 'acknowledged')}
+                        className="flex-1 rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-amber-500"
+                      >
+                        Acknowledge
+                      </button>
+                      <button
+                        onClick={() => handleServiceRequestStatus(request._id, 'completed')}
+                        className="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-500"
+                      >
+                        Complete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {orders.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-12 text-center">

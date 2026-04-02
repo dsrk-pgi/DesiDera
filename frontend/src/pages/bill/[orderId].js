@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import QRCode from 'qrcode';
 
 export default function BillPage() {
   const router = useRouter();
@@ -10,18 +11,43 @@ export default function BillPage() {
   const [billData, setBillData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState('');
+  const canvasRef = useRef(null);
 
   useEffect(() => {
     if (!orderId) return;
     
     const storedBill = localStorage.getItem(`bill_${orderId}`);
     if (storedBill) {
-      setBillData(JSON.parse(storedBill));
+      const data = JSON.parse(storedBill);
+      setBillData(data);
+      generateUpiQR(data.sessionTotal);
       setLoading(false);
     } else {
       setLoading(false);
     }
   }, [orderId]);
+
+  async function generateUpiQR(amount) {
+    try {
+      const upiId = '7318582007@paytm';
+      const name = 'DesiDera';
+      const upiString = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(name)}&am=${amount.toFixed(2)}&cu=INR`;
+      
+      const qrDataUrl = await QRCode.toDataURL(upiString, {
+        width: 200,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      
+      setQrCodeUrl(qrDataUrl);
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+    }
+  }
 
   async function handleDownloadPDF() {
     setDownloading(true);
@@ -176,6 +202,26 @@ export default function BillPage() {
             <p className="text-xs font-semibold text-slate-500">Payment Mode</p>
             <p className="text-sm font-bold text-slate-700">Cash / Online</p>
           </div>
+
+          {/* UPI QR Code */}
+          {qrCodeUrl && (
+            <div className="mb-6 rounded-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
+              <h3 className="mb-4 text-center text-lg font-bold text-blue-900">
+                💳 Pay via UPI
+              </h3>
+              <div className="flex flex-col items-center">
+                <div className="rounded-2xl border-4 border-white bg-white p-3 shadow-lg">
+                  <img src={qrCodeUrl} alt="UPI QR Code" className="h-48 w-48" />
+                </div>
+                <p className="mt-4 text-center text-sm font-semibold text-blue-800">
+                  Scan with any UPI app to pay ₹{billData.sessionTotal?.toFixed(2)}
+                </p>
+                <p className="mt-2 text-center text-xs text-slate-600">
+                  Google Pay • PhonePe • Paytm • BHIM
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Thank You Message */}
           <div className="mb-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-6 text-center">

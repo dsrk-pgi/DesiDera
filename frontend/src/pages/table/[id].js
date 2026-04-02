@@ -9,6 +9,7 @@ import Toast from '@/components/Toast';
 import ShimmerCard from '@/components/ShimmerCard';
 import RunningBill from '@/components/RunningBill';
 import FinalBillDisplay from '@/components/FinalBillDisplay';
+import ServiceBell from '@/components/ServiceBell';
 import { getMenu, getOrderHistory, placeOrderWithItems } from '@/lib/api';
 
 function buildWhatsAppLink({ tableNumber, cartLines }) {
@@ -599,6 +600,8 @@ export default function TablePage() {
           />
         </div>
       </div>
+
+      <ServiceBell tableNumber={tableNumber} />
     </Layout>
   );
 }
