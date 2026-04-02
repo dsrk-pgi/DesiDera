@@ -9,6 +9,7 @@ const cartRoutes = require('./routes/cart');
 const orderRoutes = require('./routes/orders');
 const feedbackRoutes = require('./routes/feedback');
 const adminRoutes = require('./routes/admin');
+const serviceRoutes = require('./routes/service');
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/service', serviceRoutes);
 
 app.use('/api/bills', express.static(path.join(__dirname, '..', 'bills')));
 

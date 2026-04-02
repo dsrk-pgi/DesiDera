@@ -2,7 +2,7 @@ const MenuItem = require('../models/MenuItem');
 
 async function listMenu(req, res) {
   try {
-    const docs = await MenuItem.find().sort({ createdAt: -1 });
+    const docs = await MenuItem.find({ isAvailable: true }).sort({ createdAt: -1 });
     const items = docs.map((d) => ({
       _id: d._id,
       name: d.name,

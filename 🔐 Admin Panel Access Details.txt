@@ -1,0 +1,10 @@
+🔐 Admin Panel Access Details
+Admin Panel URL
+Login Page: https://desi-dera.vercel.app/admin/login
+
+After successful login, you'll be redirected to: Dashboard: https://desi-dera.vercel.app/admin/dashboard
+
+Login Credentials
+Username: admin
+Password: DesiDera@2026
+
